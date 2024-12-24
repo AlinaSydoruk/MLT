@@ -1,197 +1,110 @@
 import pandas as pd
-import tensorflow as tf
-from tensorflow.keras.models import Sequential
+from keras.src.legacy.preprocessing.image import ImageDataGenerator
+from keras import Sequential
 from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import Conv2D, MaxPooling2D
-from tensorflow.keras.applications import VGG19
-from tensorflow.keras.layers import GlobalAveragePooling2D
-from tensorflow.keras.applications import ResNet50
-import matplotlib.pyplot as plt
-import os
 
-url = 'https://drive.google.com/drive/folders/1nzVk4GOvKR6P87uPszUkKMPtaXV_wrZf'
+from tensorflow.keras.applications import VGG19, ResNet50
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPooling2D, GlobalAveragePooling2D
+
+
+#url = 'https://drive.google.com/drive/folders/1nzVk4GOvKR6P87uPszUkKMPtaXV_wrZf'
 
 # Save datasets path
-PATH = "./ML/unzipped_folder/"
-PATH_TRAIN = f"{PATH}train_images/"
-PATH_TEST = f"{PATH}test_images/"
 
-# Check datasets in file system
+# Define the paths to the training and validation directories
+base_dir = 'C:/Users/Alina Sidoruk/PycharmProjects/ML_Lab1/data'
+validation_dir = f'{base_dir}/test'
+train_dir = f'{base_dir}/train'
+validation_dir = f'{base_dir}/val'
 
-os.listdir(PATH)
+import tensorflow as tf
+print(tf.__version__)
 
-# Set the correct local path where you want to store your images
-train_images_path = os.path.join(PATH, "train_images")
-test_images_path = os.path.join(PATH, "test_images")
 
-# Create subfolders for train and test datasets if they don't exist
-if not os.path.exists(train_images_path):
-    os.mkdir(train_images_path)
-if not os.path.exists(test_images_path):
-    os.mkdir(test_images_path)
-print("Folders created or already exist.")
+# ImageDataGenerator for normalization and augmentation
+train_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(rescale=1./255)
 
-# Corrected path for unzipping the train dataset
-train_images_path = os.path.join(PATH, "train_images")
-import zipfile
-with zipfile.ZipFile(train_images_path, "r") as archive:
-    for file in archive.namelist():
-        archive.extract(file, train_images_path)
+# Load images and apply transformations
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    target_size=(64, 64),
+    batch_size=20,
+    class_mode='binary')
 
-# Define paths
-test_images_path = os.path.join(PATH, "test_images")
-# Unzip test dataset
-with zipfile.ZipFile(test_images_path, "r") as archive:
-    for file in archive.namelist():
-        archive.extract(file, test_images_path)
+validation_generator = val_datagen.flow_from_directory(
+    validation_dir,
+    target_size=(64, 64),
+    batch_size=20,
+    class_mode='binary')
 
-# Save our filenames
-
-animals = pd.DataFrame({
-    'Image name': imagenames,
-    'Category': categories
-})
-animals.head(5)
-
-# Check total amount of 0 and 1 labels
-animals['Category'].value_counts()
-
-# Draw a cat
-
-# Don't forget to install 'Pillow' module (conda install pillow) to give a 'pyplot' ability of working with '.jpg'
-img = plt.imread(f"{PATH_TRAIN}train/{imagenames[1]}")
-plt.imshow(img)
-
-# Split data on train and validation subsets
-from sklearn.model_selection import train_test_split
-X_train, X_val = train_test_split(animals, test_size=0.2, random_state=2)
-X_train = X_train.reset_index()
-X_val = X_val.reset_index()
-
-# We may want to use only 1800 images because of CPU computational reasons. If so, this code should be run
-X_train = X_train.sample(n=1800).reset_index()
-X_val = X_val.sample(n=180).reset_index()
-
-# Count
-total_X_train = X_train.shape[0]
-total_X_val = X_val.shape[0]
-total_X_train, total_X_val
-
-# By default, the VGG16 model expects images with input the size 224 x 224 pixels with 3 channels (e.g., color).
-image_size = 224
-input_shape = (image_size, image_size, 3)
-
-# Define CNN model constants
-epochs = 5
-batch_size = 16
-
-# Нормалізація даних
-train_images = train_images / 255.0
-test_images = test_images / 255.0
-
-# Перетворення зображень у одновимірні вектори
-train_images = train_images.reshape(train_images.shape[0], -1)
-test_images = test_images.reshape(test_images.shape[0], -1)
-
-# Створення моделі
-model_fcn = Sequential([
-    Dense(512, activation='relu', input_shape=(train_images.shape[1],)),
+# Model A: Fully Connected Network
+model_dense = Sequential([
+    Flatten(input_shape=(64, 64, 3)),
+    Dense(512, activation='relu'),
     Dense(256, activation='relu'),
     Dense(128, activation='relu'),
     Dense(1, activation='sigmoid')
 ])
 
-# Компіляція моделі
-model_fcn.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
-
-# Навчання моделі
-model_fcn.fit(train_images, train_labels, epochs=10, validation_split=0.2)
-
-# Оцінка моделі
-test_loss, test_acc = model_fcn.evaluate(test_images, test_labels)
-print(f"Точність на тестових даних: {test_acc:.2f}")
-
-
-
-# Створення моделі
+# Model B: Convolutional Neural Network
 model_cnn = Sequential([
-    Conv2D(32, (3, 3), activation='relu', input_shape=(150, 150, 3)),
+    Conv2D(32, (3, 3), activation='relu', input_shape=(64, 64, 3)),
     MaxPooling2D(2, 2),
     Conv2D(64, (3, 3), activation='relu'),
     MaxPooling2D(2, 2),
     Flatten(),
-    Dense(512, activation='relu'),
+    Dense(128, activation='relu'),
     Dense(1, activation='sigmoid')
 ])
 
-# Компіляція моделі
-model_cnn.compile(optimizer=Adam(), loss='binary_crossentropy', metrics=['accuracy'])
+# Compile and train Dense Model
+model_dense.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model_dense.fit(train_generator, validation_data=validation_generator, epochs=10)
 
-# Навчання моделі
-model_cnn.fit(train_images, train_labels, epochs=10, validation_split=0.2)
-
-
-
-
-
-# Оцінка моделі
-test_loss, test_acc = model_cnn.evaluate(test_images, test_labels)
-print(f"Точність на тестових даних: {test_acc:.2f}")
+# Compile and train CNN Model
+model_cnn.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model_cnn.fit(train_generator, validation_data=validation_generator, epochs=10)
 
 
+# Завантаження та налаштування моделей VGG19 та ResNet для перенесення навчання
+base_vgg19 = VGG19(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+base_resnet = ResNet50(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
 
-# Завантаження моделі VGG19
-base_model_vgg19 = VGG19(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
-base_model_vgg19.trainable = False  # Заморожування моделі
+# Заморожування конволюційних шарів
+for layer in base_vgg19.layers:
+    layer.trainable = False
+for layer in base_resnet.layers:
+    layer.trainable = False
 
 # Додавання нових шарів
-model_vgg19 = Sequential([
-    base_model_vgg19,
-    GlobalAveragePooling2D(),
-    Dense(512, activation='relu'),
-    Dense(1, activation='sigmoid')
-])
+x_vgg = GlobalAveragePooling2D()(base_vgg19.output)
+x_res = GlobalAveragePooling2D()(base_resnet.output)
+x_vgg = Dense(512, activation='relu')(x_vgg)
+x_res = Dense(512, activation='relu')(x_res)
+output_vgg = Dense(1, activation='sigmoid')(x_vgg)
+output_res = Dense(1, activation='sigmoid')(x_res)
 
-# Компіляція моделі
+model_vgg19 = Model(inputs=base_vgg19.input, outputs=output_vgg)
+model_resnet = Model(inputs=base_resnet.input, outputs=output_res)
+
+# Компіляція і тренування адаптованих моделей
 model_vgg19.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-
-# Навчання моделі
-history_vgg19 = model_vgg19.fit(train_images, train_labels, epochs=5, validation_data=(test_images, test_labels))
-
-# Завантаження моделі ResNet50
-base_model_resnet = ResNet50(weights='imagenet', include_top=False, input_shape=(150, 150, 3))
-base_model_resnet.trainable = False  # Заморожування моделі
-
-# Додавання нових шарів
-model_resnet = Sequential([
-    base_model_resnet,
-    GlobalAveragePooling2D(),
-    Dense(512, activation='relu'),
-    Dense(1, activation='sigmoid')
-])
-
-# Компіляція моделі
 model_resnet.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+model_vgg19.fit(train_generator, validation_data=validation_generator, epochs=10)
+model_resnet.fit(train_generator, validation_data=validation_generator, epochs=10)
 
-# Навчання моделі
-history_resnet = model_resnet.fit(train_images, train_labels, epochs=5, validation_data=(test_images, test_labels))
+# Оцінка продуктивності моделей
+dense_scores = model_dense.evaluate(validation_generator)
+cnn_scores = model_cnn.evaluate(validation_generator)
+vgg_scores = model_vgg19.evaluate(validation_generator)
+res_scores = model_resnet.evaluate(validation_generator)
 
-def plot_history(histories):
-    plt.figure(figsize=(14, 5))
-    for history, model_name in histories:
-        plt.plot(history.history['accuracy'], label=f'{model_name} Train Acc')
-        plt.plot(history.history['val_accuracy'], label=f'{model_name} Val Acc')
-
-    plt.title('Model Accuracy')
-    plt.ylabel('Accuracy')
-    plt.xlabel('Epoch')
-    plt.legend()
-    return plt
-
-# Повторне навчання FCN та CNN з більшою кількістю епох
-history_fcn_more = model_fcn.fit(train_images, train_labels, epochs=20, validation_data=(test_images, test_labels))
-history_cnn_more = model_cnn.fit(train_images, train_labels, epochs=20, validation_data=(test_images, test_labels))
-
-# Візуалізація
-plot_history([(history_fcn_more, 'FCN'), (history_cnn_more, 'CNN')]).show()
+print("Performance of Dense Model:", dense_scores)
+print("Performance of CNN Model:", cnn_scores)
+print("Performance of VGG19:", vgg_scores)
+print("Performance of ResNet:", res_scores)
